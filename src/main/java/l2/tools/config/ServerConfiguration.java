@@ -13,6 +13,8 @@ public final class ServerConfiguration {
     public static final int DEFAULT_PORT = 80;
     public static final String DEFAULT_UPLOAD_DIR = "crashes/";
     public static final int DEFAULT_MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB - reasonable for crash dumps
+    public static final int DEFAULT_MAX_REQUEST_SIZE = 60 * 1024 * 1024; // 60MB - slightly larger than max file size
+    public static final int DEFAULT_MAX_HEADER_SIZE = 8 * 1024; // 8KB for headers
     public static final int DEFAULT_REQUEST_TIMEOUT = 30 * 1000; // 30 seconds
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
 
@@ -20,6 +22,8 @@ public final class ServerConfiguration {
     private final int port;
     private final Path uploadDirectory;
     private final int maxFileSize;
+    private final int maxRequestSize;
+    private final int maxHeaderSize;
     private final int requestTimeout;
     private final int threadPoolSize;
     
@@ -28,6 +32,8 @@ public final class ServerConfiguration {
         this.port = builder.port;
         this.uploadDirectory = builder.uploadDirectory;
         this.maxFileSize = builder.maxFileSize;
+        this.maxRequestSize = builder.maxRequestSize;
+        this.maxHeaderSize = builder.maxHeaderSize;
         this.requestTimeout = builder.requestTimeout;
         this.threadPoolSize = builder.threadPoolSize;
     }
@@ -52,6 +58,14 @@ public final class ServerConfiguration {
         return maxFileSize;
     }
     
+    public int getMaxRequestSize() {
+        return maxRequestSize;
+    }
+    
+    public int getMaxHeaderSize() {
+        return maxHeaderSize;
+    }
+    
     public int getRequestTimeout() {
         return requestTimeout;
     }
@@ -65,6 +79,8 @@ public final class ServerConfiguration {
         private int port = DEFAULT_PORT;
         private Path uploadDirectory = Paths.get(DEFAULT_UPLOAD_DIR);
         private int maxFileSize = DEFAULT_MAX_FILE_SIZE;
+        private int maxRequestSize = DEFAULT_MAX_REQUEST_SIZE;
+        private int maxHeaderSize = DEFAULT_MAX_HEADER_SIZE;
         private int requestTimeout = DEFAULT_REQUEST_TIMEOUT;
         private int threadPoolSize = DEFAULT_THREAD_POOL_SIZE;
 
@@ -100,6 +116,22 @@ public final class ServerConfiguration {
             return this;
         }
         
+        public Builder maxRequestSize(int maxRequestSize) {
+            if (maxRequestSize <= 0) {
+                throw new IllegalArgumentException("Max request size must be positive");
+            }
+            this.maxRequestSize = maxRequestSize;
+            return this;
+        }
+        
+        public Builder maxHeaderSize(int maxHeaderSize) {
+            if (maxHeaderSize <= 0) {
+                throw new IllegalArgumentException("Max header size must be positive");
+            }
+            this.maxHeaderSize = maxHeaderSize;
+            return this;
+        }
+        
         public Builder requestTimeout(int requestTimeout) {
             if (requestTimeout <= 0) {
                 throw new IllegalArgumentException("Request timeout must be positive");
@@ -128,6 +160,8 @@ public final class ServerConfiguration {
                 ", port=" + port +
                 ", uploadDirectory=" + uploadDirectory +
                 ", maxFileSize=" + maxFileSize +
+                ", maxRequestSize=" + maxRequestSize +
+                ", maxHeaderSize=" + maxHeaderSize +
                 ", requestTimeout=" + requestTimeout +
                 ", threadPoolSize=" + threadPoolSize +
                 '}';

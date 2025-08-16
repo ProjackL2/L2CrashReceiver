@@ -94,26 +94,90 @@ public final class HttpRequestHandler implements Runnable {
         if (requestLine == null || requestLine.trim().isEmpty()) {
             throw new IllegalArgumentException("Empty request line");
         }
-        
+
+        // Validate request line length to prevent buffer overflow
+        if (requestLine.length() > 2048) { // RFC 7230 suggests 8KB but we're more restrictive
+            logger.warning("Request line too long: " + requestLine.length() + " bytes");
+            throw new IllegalArgumentException("Request line too long: " + requestLine.length() + " bytes");
+        }
+
         Map<String, String> headers = parseHeaders(reader);
-        
+
         return new HttpRequest(requestLine, headers);
     }
     
     private Map<String, String> parseHeaders(BufferedReader reader) throws IOException {
         Map<String, String> headers = new HashMap<>();
         String headerLine;
-        
+        int totalHeaderSize = 0;
+        int headerCount = 0;
+
         while ((headerLine = reader.readLine()) != null && !headerLine.isEmpty()) {
+            totalHeaderSize += headerLine.length() + 2; // +2 for \r\n
+            // Check total header size
+            if (totalHeaderSize > configuration.getMaxHeaderSize()) {
+                logger.warning(String.format("Request headers too large: %d bytes (max: %d)", totalHeaderSize, configuration.getMaxHeaderSize()));
+                throw new IllegalArgumentException(
+                    String.format("Request headers too large: %d bytes (max: %d)",
+                        totalHeaderSize, configuration.getMaxHeaderSize())
+                );
+            }
+
+            // Check header count to prevent header bombing
+            if (++headerCount > 50) { // Reasonable limit on number of headers
+                logger.warning("Too many headers: " + headerCount);
+                throw new IllegalArgumentException("Too many headers: " + headerCount);
+            }
+
             int colonIndex = headerLine.indexOf(':');
             if (colonIndex > 0) {
                 String key = headerLine.substring(0, colonIndex).trim();
                 String value = headerLine.substring(colonIndex + 1).trim();
+
+                // Validate header name and value
+                if (key.isEmpty()) {
+                    throw new IllegalArgumentException("Empty header name");
+                }
+
+                // Check for suspicious headers
+                if (containsSuspiciousHeaderContent(key, value)) {
+                    logger.warning("Suspicious header detected: " + key + ": " + value);
+                    throw new IllegalArgumentException("Suspicious header content");
+                }
+
                 headers.put(key, value);
             }
         }
         
         return headers;
+    }
+
+    /**
+     * Checks for suspicious content in HTTP headers that might indicate attacks.
+     */
+    private boolean containsSuspiciousHeaderContent(String key, String value) {
+        String lowerKey = key.toLowerCase();
+        String lowerValue = value.toLowerCase();
+
+        // Check for script injection attempts
+        String[] suspiciousPatterns = {
+            "<script", "javascript:", "data:", "vbscript:", "onload=", "onerror=",
+            "eval(", "expression(", "\\x", "\\u", "%3c", "%3e", "%22", "%27"
+        };
+
+        for (String pattern : suspiciousPatterns) {
+            if (lowerValue.contains(pattern)) {
+                return true;
+            }
+        }
+
+        // Check for path traversal in certain headers
+        if ((lowerKey.contains("file") || lowerKey.contains("path")) &&
+            (value.contains("../") || value.contains("..\\"))) {
+            return true;
+        }
+
+        return false;
     }
     
     private HttpResponse processRequest(HttpRequest request, BufferedReader reader) {
@@ -135,7 +199,7 @@ public final class HttpRequestHandler implements Runnable {
                 return HttpResponse.badRequest("Invalid or missing boundary in Content-Type");
             }
             
-            // Read request body
+            // Validate and read request body with size limits
             byte[] body = readRequestBody(reader, request.getHeaders());
             if (body.length == 0) {
                 return HttpResponse.badRequest("Empty request body");
@@ -172,19 +236,72 @@ public final class HttpRequestHandler implements Runnable {
         if (contentLength <= 0) {
             throw new IllegalArgumentException("Content-Length must be positive");
         }
-        
+
+        // Validate request size against configuration
+        if (contentLength > configuration.getMaxRequestSize()) {
+            logger.warning(String.format("Request too large: %d bytes (max: %d) from %s",
+                    contentLength, configuration.getMaxRequestSize(),
+                    clientSocket.getInetAddress().getHostAddress()));
+            throw new IllegalArgumentException(
+                String.format("Request body too large: %d bytes (max: %d)",
+                    contentLength, configuration.getMaxRequestSize())
+            );
+        }
+
+        // Use a streaming approach for large requests to avoid memory issues
+        if (contentLength > 1024 * 1024) { // 1MB threshold for streaming
+            return readRequestBodyStreaming(reader, contentLength);
+        } else {
+            return readRequestBodyBuffered(reader, contentLength);
+        }
+    }
+
+    /**
+     * Reads request body using a buffered approach for smaller requests.
+     */
+    private byte[] readRequestBodyBuffered(BufferedReader reader, int contentLength) throws IOException {
         char[] buffer = new char[contentLength];
         int totalRead = 0;
         
         while (totalRead < contentLength) {
             int bytesRead = reader.read(buffer, totalRead, contentLength - totalRead);
             if (bytesRead == -1) {
-                break;
+                throw new IOException("Unexpected end of stream while reading request body");
             }
             totalRead += bytesRead;
         }
         
         return new String(buffer, 0, totalRead).getBytes(StandardCharsets.ISO_8859_1);
+    }
+
+    /**
+     * Reads request body using a streaming approach for larger requests.
+     */
+    private byte[] readRequestBodyStreaming(BufferedReader reader, int contentLength) throws IOException {
+        // Use a smaller buffer for streaming to control memory usage
+        final int BUFFER_SIZE = 8192; // 8KB buffer
+        char[] tempBuffer = new char[BUFFER_SIZE];
+        StringBuilder bodyBuilder = new StringBuilder(contentLength);
+        int totalRead = 0;
+
+        while (totalRead < contentLength) {
+            int toRead = Math.min(BUFFER_SIZE, contentLength - totalRead);
+            int bytesRead = reader.read(tempBuffer, 0, toRead);
+
+            if (bytesRead == -1) {
+                throw new IOException("Unexpected end of stream while reading request body");
+            }
+
+            bodyBuilder.append(tempBuffer, 0, bytesRead);
+            totalRead += bytesRead;
+
+            // Additional safety check during streaming
+            if (totalRead > configuration.getMaxRequestSize()) {
+                throw new IllegalArgumentException("Request body exceeded maximum size during streaming");
+            }
+        }
+
+        return bodyBuilder.toString().getBytes(StandardCharsets.ISO_8859_1);
     }
     
     private HttpResponse processCrashReport(MultipartParser.MultipartData multipartData) {
