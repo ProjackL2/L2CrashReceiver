@@ -1,8 +1,11 @@
 package l2.tools;
 
-import l2.tools.config.ServerConfiguration;
+import l2.tools.config.ServerConfig;
+import l2.tools.exception.ProcessingException;
 import l2.tools.http.HttpRequestHandler;
-import l2.tools.service.FileService;
+import l2.tools.monitoring.ServerMetrics;
+import l2.tools.service.FileProcessor;
+import l2.tools.service.FileManager;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -20,22 +23,27 @@ import java.util.logging.Logger;
  * This server accepts POST requests with multipart/form-data containing:
  * - CRVersion: Version information
  * - error: Error description text
- * - upload_file_minidump: The actual dump file
+ * - dumpfile: The actual dump file
+ * - gamelog: Game log file(l2.log)
+ * - networklog: Network log file(Network.log)
  */
+
 public final class CrashReportServer {
     
-    private static final Logger logger = Logger.getLogger(CrashReportServer.class.getName());
+    private static final Logger logger = Logger.getLogger(CrashReportServer.class.getSimpleName());
     
-    private final ServerConfiguration configuration;
-    private final FileService fileService;
+    private final ServerConfig configuration;
+    private final FileManager fileManager;
+    private final FileProcessor fileProcessor;
     private final ExecutorService executorService;
     
     private ServerSocket serverSocket;
     private volatile boolean running = false;
     
-    public CrashReportServer(ServerConfiguration configuration) {
+    public CrashReportServer(ServerConfig configuration) {
         this.configuration = configuration;
-        this.fileService = new FileService(configuration);
+        this.fileManager = new FileManager(configuration);
+        this.fileProcessor = new FileProcessor(fileManager);
         this.executorService = Executors.newFixedThreadPool(configuration.getThreadPoolSize());
     }
     
@@ -43,21 +51,24 @@ public final class CrashReportServer {
      * Starts the server and begins accepting connections.
      * This method blocks until the server is stopped.
      */
-    public void start() throws IOException {
+    public void start() throws IOException, ProcessingException {
         if (running) {
             throw new IllegalStateException("Server is already running");
         }
 
         logger.info("Configuration: " + configuration);
         
-        // Initialize file service
-        fileService.initializeUploadDirectory();
+        // Initialize file manager
+        fileManager.initializeUploadDirectory();
         logger.info("Upload directory initialized: " + configuration.getUploadDirectory());
         
         // Create server socket
         serverSocket = new ServerSocket(configuration.getPort(), 50, InetAddress.getByName(configuration.getHost()));
 
         running = true;
+        
+        // Start metrics tracking
+        ServerMetrics.getInstance().serverStarted();
         
         logger.info("Crash Report Server started on " + serverSocket.getInetAddress().getHostAddress() + ":" + serverSocket.getLocalPort());
         
@@ -67,7 +78,7 @@ public final class CrashReportServer {
                 try {
                     Socket clientSocket = serverSocket.accept();
                     if (running) {
-                        HttpRequestHandler handler = new HttpRequestHandler(clientSocket, fileService, configuration);
+                        HttpRequestHandler handler = new HttpRequestHandler(clientSocket, fileProcessor, configuration);
                         executorService.submit(handler);
                     } else {
                         clientSocket.close();
@@ -123,6 +134,9 @@ public final class CrashReportServer {
             executorService.shutdownNow();
             Thread.currentThread().interrupt();
         }
+        
+        // Log final metrics summary
+        ServerMetrics.getInstance().logMetricsSummary();
         
         logger.info("Crash Report Server stopped");
     }

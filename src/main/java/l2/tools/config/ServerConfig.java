@@ -5,16 +5,15 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Configuration class for the L2 Crash Receiver server.
  * Contains all configurable parameters with sensible defaults.
  */
-public final class ServerConfiguration {
+public final class ServerConfig {
 
-    private static final Logger logger = Logger.getLogger(ServerConfiguration.class.getName());
+    private static final Logger logger = Logger.getLogger(ServerConfig.class.getSimpleName());
     
     public static final String DEFAULT_HOST = "127.0.0.1";
     public static final int DEFAULT_PORT = 80;
@@ -34,7 +33,7 @@ public final class ServerConfiguration {
     private final int requestTimeout;
     private final int threadPoolSize;
     
-    private ServerConfiguration(Builder builder) {
+    private ServerConfig(Builder builder) {
         this.host = builder.host;
         this.port = builder.port;
         this.uploadDirectory = builder.uploadDirectory;
@@ -56,7 +55,7 @@ public final class ServerConfiguration {
      * @return configured ServerConfiguration with properties loaded from file
      * @throws IOException if the properties file cannot be loaded
      */
-    public static ServerConfiguration fromProperties(String propertiesFileName) throws IOException {
+    public static ServerConfig fromProperties(String propertiesFileName) throws IOException {
         Properties properties = loadProperties(propertiesFileName);
         return fromProperties(properties);
     }
@@ -68,7 +67,7 @@ public final class ServerConfiguration {
      * @param properties the Properties object containing configuration
      * @return configured ServerConfiguration
      */
-    public static ServerConfiguration fromProperties(Properties properties) {
+    public static ServerConfig fromProperties(Properties properties) {
         Builder builder = builder();
         
         // Load host
@@ -156,7 +155,7 @@ public final class ServerConfiguration {
     private static Properties loadProperties(String propertiesFileName) throws IOException {
         Properties properties = new Properties();
         
-        try (InputStream inputStream = ServerConfiguration.class.getClassLoader()
+        try (InputStream inputStream = ServerConfig.class.getClassLoader()
                 .getResourceAsStream(propertiesFileName)) {
             
             if (inputStream == null) {
@@ -276,8 +275,8 @@ public final class ServerConfiguration {
             return this;
         }
         
-        public ServerConfiguration build() {
-            return new ServerConfiguration(this);
+        public ServerConfig build() {
+            return new ServerConfig(this);
         }
     }
     

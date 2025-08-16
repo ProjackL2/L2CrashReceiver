@@ -1,6 +1,7 @@
 package l2.tools;
 
-import l2.tools.config.ServerConfiguration;
+import l2.tools.config.ServerConfig;
+import l2.tools.exception.ProcessingException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,25 +25,22 @@ import java.util.logging.LogManager;
  */
 public final class L2CrashReceiver {
     
-    private static final Logger logger = Logger.getLogger(L2CrashReceiver.class.getName());
+    private static final Logger logger = Logger.getLogger(L2CrashReceiver.class.getSimpleName());
 
     public static void main(String[] args) {
         initializeLogging();
         
         try {
-            ServerConfiguration configuration = loadConfiguration();
-            
-            logger.info("Starting L2 Crash Receiver with configuration: " + configuration);
-            
+            logger.info("Starting L2 Crash Receiver\n");
+
+            ServerConfig configuration = loadConfiguration();
+            logger.info("Configuration: " + configuration);
+
             CrashReportServer server = new CrashReportServer(configuration);
-            
-            // Add shutdown hook for graceful shutdown
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 logger.info("Shutdown signal received, stopping server...");
                 server.stop();
             }));
-            
-            // Start the server (this blocks until the server is stopped)
             server.start();
         } catch (IllegalArgumentException e) {
             logger.severe("Configuration error: " + e.getMessage());
@@ -50,6 +48,9 @@ public final class L2CrashReceiver {
             System.exit(1);
         } catch (IOException e) {
             logger.log(Level.SEVERE, "Failed to start server", e);
+            System.exit(1);
+        } catch (ProcessingException e) {
+            logger.log(Level.SEVERE, "File system initialization failed", e);
             System.exit(1);
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Unexpected error", e);
@@ -87,18 +88,14 @@ public final class L2CrashReceiver {
      * @return configured ServerConfiguration
      * @throws IOException if configuration loading fails completely
      */
-    private static ServerConfiguration loadConfiguration() throws IOException {
+    private static ServerConfig loadConfiguration() throws IOException {
         try {
-            // Try to load from server.properties in classpath
-            ServerConfiguration config = ServerConfiguration.fromProperties("server.properties");
-            logger.info("Configuration loaded from server.properties");
-            return config;
+            return ServerConfig.fromProperties("server.properties");
         } catch (IOException e) {
             logger.warning("Could not load server.properties from classpath: " + e.getMessage());
             logger.info("Using default configuration values");
-            
-            // Fallback to default configuration
-            return ServerConfiguration.builder().build();
+
+            return ServerConfig.builder().build();
         }
     }
     
@@ -107,14 +104,14 @@ public final class L2CrashReceiver {
         System.err.println();
         System.err.println("Configuration is loaded from server.properties file in the classpath.");
         System.err.println("If server.properties is not found, the following default values are used:");
-        System.err.println("  server.host: " + ServerConfiguration.DEFAULT_HOST);
-        System.err.println("  server.port: " + ServerConfiguration.DEFAULT_PORT);
-        System.err.println("  server.upload.directory: " + ServerConfiguration.DEFAULT_UPLOAD_DIR);
-        System.err.println("  server.upload.max.file.size: " + ServerConfiguration.DEFAULT_MAX_FILE_SIZE + " bytes");
-        System.err.println("  server.upload.max.request.size: " + ServerConfiguration.DEFAULT_MAX_REQUEST_SIZE + " bytes");
-        System.err.println("  server.http.max.header.size: " + ServerConfiguration.DEFAULT_MAX_HEADER_SIZE + " bytes");
-        System.err.println("  server.http.request.timeout: " + ServerConfiguration.DEFAULT_REQUEST_TIMEOUT + " ms");
-        System.err.println("  server.thread.pool.size: " + ServerConfiguration.DEFAULT_THREAD_POOL_SIZE);
+        System.err.println("  server.host: " + ServerConfig.DEFAULT_HOST);
+        System.err.println("  server.port: " + ServerConfig.DEFAULT_PORT);
+        System.err.println("  server.upload.directory: " + ServerConfig.DEFAULT_UPLOAD_DIR);
+        System.err.println("  server.upload.max.file.size: " + ServerConfig.DEFAULT_MAX_FILE_SIZE + " bytes");
+        System.err.println("  server.upload.max.request.size: " + ServerConfig.DEFAULT_MAX_REQUEST_SIZE + " bytes");
+        System.err.println("  server.http.max.header.size: " + ServerConfig.DEFAULT_MAX_HEADER_SIZE + " bytes");
+        System.err.println("  server.http.request.timeout: " + ServerConfig.DEFAULT_REQUEST_TIMEOUT + " ms");
+        System.err.println("  server.thread.pool.size: " + ServerConfig.DEFAULT_THREAD_POOL_SIZE);
         System.err.println();
         System.err.println("Create a server.properties file to customize these values.");
     }

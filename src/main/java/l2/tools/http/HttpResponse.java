@@ -1,13 +1,17 @@
 package l2.tools.http;
 
+import l2.tools.constant.HttpConstants;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Represents an HTTP response with status code, headers, and body.
+ * Immutable representation of an HTTP response with status code, headers, and body.
+ * Provides factory methods for common response types and builder pattern for custom responses.
  */
 public final class HttpResponse {
     
@@ -16,42 +20,62 @@ public final class HttpResponse {
     private final Map<String, String> headers;
     private final String body;
     
-    private HttpResponse(int statusCode, String statusMessage, Map<String, String> headers, String body) {
-        this.statusCode = statusCode;
-        this.statusMessage = statusMessage;
-        this.headers = new HashMap<>(headers);
-        this.body = body != null ? body : "";
+    private HttpResponse(Builder builder) {
+        this.statusCode = builder.statusCode;
+        this.statusMessage = builder.statusMessage;
+        this.headers = Collections.unmodifiableMap(new HashMap<>(builder.headers));
+        this.body = builder.body != null ? builder.body : "";
+    }
+    
+    public static Builder builder() {
+        return new Builder();
     }
     
     public static HttpResponse ok() {
-        return new HttpResponse(200, "OK", getDefaultHeaders(), "");
+        return new Builder()
+            .status(HttpConstants.STATUS_OK, HttpConstants.STATUS_OK_MESSAGE)
+            .defaultHeaders()
+            .build();
     }
     
     public static HttpResponse ok(String body) {
-        return new HttpResponse(200, "OK", getDefaultHeaders(), body);
+        return new Builder()
+            .status(HttpConstants.STATUS_OK, HttpConstants.STATUS_OK_MESSAGE)
+            .defaultHeaders()
+            .body(body)
+            .build();
     }
     
     public static HttpResponse badRequest(String message) {
-        return new HttpResponse(400, "Bad Request", getDefaultHeaders(), message);
+        return new Builder()
+            .status(HttpConstants.STATUS_BAD_REQUEST, HttpConstants.STATUS_BAD_REQUEST_MESSAGE)
+            .defaultHeaders()
+            .body(message)
+            .build();
     }
     
     public static HttpResponse payloadTooLarge(String message) {
-        return new HttpResponse(413, "Payload Too Large", getDefaultHeaders(), message);
+        return new Builder()
+            .status(HttpConstants.STATUS_PAYLOAD_TOO_LARGE, HttpConstants.STATUS_PAYLOAD_TOO_LARGE_MESSAGE)
+            .defaultHeaders()
+            .body(message)
+            .build();
     }
     
     public static HttpResponse requestTimeout(String message) {
-        return new HttpResponse(408, "Request Timeout", getDefaultHeaders(), message);
+        return new Builder()
+            .status(HttpConstants.STATUS_REQUEST_TIMEOUT, HttpConstants.STATUS_REQUEST_TIMEOUT_MESSAGE)
+            .defaultHeaders()
+            .body(message)
+            .build();
     }
     
     public static HttpResponse internalServerError(String message) {
-        return new HttpResponse(500, "Internal Server Error", getDefaultHeaders(), message);
-    }
-    
-    private static Map<String, String> getDefaultHeaders() {
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Content-Type", "text/plain; charset=utf-8");
-        headers.put("Connection", "close");
-        return headers;
+        return new Builder()
+            .status(HttpConstants.STATUS_INTERNAL_SERVER_ERROR, HttpConstants.STATUS_INTERNAL_SERVER_ERROR_MESSAGE)
+            .defaultHeaders()
+            .body(message)
+            .build();
     }
     
     /**
@@ -61,19 +85,27 @@ public final class HttpResponse {
         StringBuilder response = new StringBuilder();
         
         // Status line
-        response.append("HTTP/1.1 ").append(statusCode).append(" ").append(statusMessage).append("\r\n");
+        response.append(HttpConstants.HTTP_VERSION)
+                .append(" ")
+                .append(statusCode)
+                .append(" ")
+                .append(statusMessage)
+                .append(HttpConstants.CRLF);
         
         // Headers
         Map<String, String> allHeaders = new HashMap<>(headers);
         byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-        allHeaders.put("Content-Length", String.valueOf(bodyBytes.length));
+        allHeaders.put(HttpConstants.CONTENT_LENGTH_HEADER, String.valueOf(bodyBytes.length));
         
         for (Map.Entry<String, String> header : allHeaders.entrySet()) {
-            response.append(header.getKey()).append(": ").append(header.getValue()).append("\r\n");
+            response.append(header.getKey())
+                    .append(HttpConstants.HEADER_SEPARATOR)
+                    .append(header.getValue())
+                    .append(HttpConstants.CRLF);
         }
         
         // Empty line between headers and body
-        response.append("\r\n");
+        response.append(HttpConstants.CRLF);
         
         // Write headers
         outputStream.write(response.toString().getBytes(StandardCharsets.UTF_8));
@@ -91,6 +123,10 @@ public final class HttpResponse {
         return statusMessage;
     }
     
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+    
     public String getBody() {
         return body;
     }
@@ -100,7 +136,46 @@ public final class HttpResponse {
         return "HttpResponse{" +
                 "statusCode=" + statusCode +
                 ", statusMessage='" + statusMessage + '\'' +
-                ", body='" + body + '\'' +
+                ", headers=" + headers.size() +
+                ", bodyLength=" + body.length() +
                 '}';
+    }
+    
+    public static final class Builder {
+        private int statusCode;
+        private String statusMessage;
+        private Map<String, String> headers = new HashMap<>();
+        private String body;
+        
+        public Builder status(int statusCode, String statusMessage) {
+            this.statusCode = statusCode;
+            this.statusMessage = statusMessage;
+            return this;
+        }
+        
+        public Builder headers(Map<String, String> headers) {
+            this.headers = new HashMap<>(headers);
+            return this;
+        }
+        
+        public Builder addHeader(String name, String value) {
+            this.headers.put(name, value);
+            return this;
+        }
+        
+        public Builder defaultHeaders() {
+            this.headers.put(HttpConstants.CONTENT_TYPE_HEADER, HttpConstants.CONTENT_TYPE_TEXT_PLAIN);
+            this.headers.put(HttpConstants.CONNECTION_HEADER, HttpConstants.CONNECTION_CLOSE);
+            return this;
+        }
+        
+        public Builder body(String body) {
+            this.body = body;
+            return this;
+        }
+        
+        public HttpResponse build() {
+            return new HttpResponse(this);
+        }
     }
 }

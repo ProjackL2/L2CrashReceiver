@@ -57,9 +57,9 @@ The server accepts POST requests to any path with the following requirements:
 - **Method**: POST
 - **Content-Type**: multipart/form-data
 - **Fields**:
-  - `CRVersion` (optional): Version information
-  - `error` (optional): Error description text
-  - `dumpfile` (optional): Binary dump file
+  - `CRVersion` : Version information
+  - `error` : Error description text
+  - `dumpfile` : Binary dump file
   - `gamelog` (optional): Game log file(l2.log)
   - `networklog` (optional): Network log file(Network.log)
 
