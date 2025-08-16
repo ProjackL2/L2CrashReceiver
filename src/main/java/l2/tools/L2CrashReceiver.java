@@ -3,8 +3,13 @@ package l2.tools;
 import l2.tools.config.ServerConfiguration;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.logging.LogManager;
 
 /**
  * Main entry point for the L2 Crash Receiver application.
@@ -12,15 +17,20 @@ import java.util.logging.Logger;
  * This application starts an HTTP server that accepts crash reports
  * from Lineage 2 clients and saves them to the local filesystem.
  * <p>
- * Usage: java l2.tools.L2CrashReceiver [host] [port] [upload_directory] [max_file_size]
+ * Configuration is loaded from server.properties file in the classpath.
+ * If the properties file is not found, default values will be used.
+ * <p>
+ * Usage: java l2.tools.L2CrashReceiver
  */
 public final class L2CrashReceiver {
     
     private static final Logger logger = Logger.getLogger(L2CrashReceiver.class.getName());
 
     public static void main(String[] args) {
+        initializeLogging();
+        
         try {
-            ServerConfiguration configuration = parseArguments(args);
+            ServerConfiguration configuration = loadConfiguration();
             
             logger.info("Starting L2 Crash Receiver with configuration: " + configuration);
             
@@ -48,76 +58,64 @@ public final class L2CrashReceiver {
     }
     
     /**
-     * Parses command line arguments and creates server configuration.
-     * 
-     * @param args command line arguments [port] [upload_directory]
-     * @return configured ServerConfiguration
+     * Initializes logging configuration by loading logging.properties from classpath.
      */
-    private static ServerConfiguration parseArguments(String[] args) {
-        ServerConfiguration.Builder builder = ServerConfiguration.builder();
-
-        if (args.length >= 1) {
-            String host = args[0].trim();
-            if (!host.isEmpty()) {
-                builder.host(host);
+    private static void initializeLogging() {
+        try {
+            Path logDir = Paths.get("logs");
+            if (!Files.exists(logDir)) {
+                Files.createDirectories(logDir);
+            }
+            
+            InputStream configStream = L2CrashReceiver.class.getClassLoader()
+                .getResourceAsStream("logging.properties");
+            
+            if (configStream != null) {
+                LogManager.getLogManager().readConfiguration(configStream);
+                configStream.close();
             } else {
-                throw new IllegalArgumentException("Host cannot be empty");
+                System.err.println("Warning: Could not find logging.properties in classpath, using default logging configuration");
             }
-        } else {
-            builder.host(ServerConfiguration.DEFAULT_HOST);
+        } catch (IOException e) {
+            System.err.println("Warning: Failed to load logging configuration: " + e.getMessage());
         }
-
-        if (args.length >= 2) {
-            try {
-                int port = Integer.parseInt(args[1]);
-                builder.port(port);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid port number: " + args[1]);
-            }
-        } else {
-            builder.port(ServerConfiguration.DEFAULT_PORT);
+    }
+    
+    /**
+     * Loads server configuration from properties file with fallback to defaults.
+     * 
+     * @return configured ServerConfiguration
+     * @throws IOException if configuration loading fails completely
+     */
+    private static ServerConfiguration loadConfiguration() throws IOException {
+        try {
+            // Try to load from server.properties in classpath
+            ServerConfiguration config = ServerConfiguration.fromProperties("server.properties");
+            logger.info("Configuration loaded from server.properties");
+            return config;
+        } catch (IOException e) {
+            logger.warning("Could not load server.properties from classpath: " + e.getMessage());
+            logger.info("Using default configuration values");
+            
+            // Fallback to default configuration
+            return ServerConfiguration.builder().build();
         }
-        
-        if (args.length >= 3) {
-            String uploadDir = args[2].trim();
-            if (!uploadDir.isEmpty()) {
-                builder.uploadDirectory(uploadDir);
-            } else {
-                throw new IllegalArgumentException("Upload directory cannot be empty");
-            }
-        } else {
-            builder.uploadDirectory(ServerConfiguration.DEFAULT_UPLOAD_DIR);
-        }
-
-        if (args.length >= 4) {
-            String maxFileSize = args[3].trim();
-            if (!maxFileSize.isEmpty()) {
-                builder.maxFileSize(Integer.parseInt(maxFileSize));
-            } else {
-                throw new IllegalArgumentException("Upload directory cannot be empty");
-            }
-        } else {
-            builder.maxFileSize(ServerConfiguration.DEFAULT_MAX_FILE_SIZE);
-        }
-        
-        if (args.length > 4) {
-            logger.warning("Extra command line arguments ignored: " + java.util.Arrays.toString(java.util.Arrays.copyOfRange(args, 3, args.length)));
-        }
-        
-        return builder.build();
     }
     
     private static void printUsage() {
-        System.err.println("Usage: java l2.tools.L2CrashReceiver [port] [upload_directory]");
-        System.err.println("  host: Host to listen on (default: " + ServerConfiguration.DEFAULT_HOST + ")");
-        System.err.println("  port: Port number to listen on (default: " + ServerConfiguration.DEFAULT_PORT + ")");
-        System.err.println("  upload_directory: Directory to save crash reports (default: " + ServerConfiguration.DEFAULT_UPLOAD_DIR + ")");
-        System.err.println("  max_file_size: Max allowed to upload file size (default: " + ServerConfiguration.DEFAULT_MAX_FILE_SIZE + ")");
+        System.err.println("Usage: L2CrashReceiver");
         System.err.println();
-        System.err.println("Examples:");
-        System.err.println("  java l2.tools.L2CrashReceiver");
-        System.err.println("  java l2.tools.L2CrashReceiver 0.0.0.0 8080");
-        System.err.println("  java l2.tools.L2CrashReceiver 0.0.0.0 8080 crashes/");
-        System.err.println("  java l2.tools.L2CrashReceiver 0.0.0.0 8080 crashes/ 1024000");
+        System.err.println("Configuration is loaded from server.properties file in the classpath.");
+        System.err.println("If server.properties is not found, the following default values are used:");
+        System.err.println("  server.host: " + ServerConfiguration.DEFAULT_HOST);
+        System.err.println("  server.port: " + ServerConfiguration.DEFAULT_PORT);
+        System.err.println("  server.upload.directory: " + ServerConfiguration.DEFAULT_UPLOAD_DIR);
+        System.err.println("  server.upload.max.file.size: " + ServerConfiguration.DEFAULT_MAX_FILE_SIZE + " bytes");
+        System.err.println("  server.upload.max.request.size: " + ServerConfiguration.DEFAULT_MAX_REQUEST_SIZE + " bytes");
+        System.err.println("  server.http.max.header.size: " + ServerConfiguration.DEFAULT_MAX_HEADER_SIZE + " bytes");
+        System.err.println("  server.http.request.timeout: " + ServerConfiguration.DEFAULT_REQUEST_TIMEOUT + " ms");
+        System.err.println("  server.thread.pool.size: " + ServerConfiguration.DEFAULT_THREAD_POOL_SIZE);
+        System.err.println();
+        System.err.println("Create a server.properties file to customize these values.");
     }
 }

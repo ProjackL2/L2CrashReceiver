@@ -1,4 +1,5 @@
 crashes/
+logs/
 
 .gradle
 build/
