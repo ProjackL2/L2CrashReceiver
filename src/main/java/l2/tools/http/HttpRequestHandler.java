@@ -33,6 +33,9 @@ public final class HttpRequestHandler implements Runnable {
     private static final String VERSION_FIELD = "CRVersion";
     private static final String ERROR_FIELD = "error";
     private static final String FILE_FIELD = "dumpfile";
+    private static final String FILE_GAME_LOG = "gamelog";
+    private static final String FILE_MEMORY_LOG = "memorylog";
+    private static final String FILE_NETWORK_LOG = "networklog";
     
     private final Socket clientSocket;
     private final FileService fileService;
@@ -190,29 +193,54 @@ public final class HttpRequestHandler implements Runnable {
             Optional<String> version = multipartData.getField(VERSION_FIELD);
             Optional<String> errorDescription = multipartData.getField(ERROR_FIELD);
             Optional<MultipartParser.FileData> dumpFile = multipartData.getFile(FILE_FIELD);
+            Optional<MultipartParser.FileData> gameLogFile = multipartData.getFile(FILE_GAME_LOG);
+            Optional<MultipartParser.FileData> memoryLogFile = multipartData.getFile(FILE_MEMORY_LOG);
+            Optional<MultipartParser.FileData> networkLogFile = multipartData.getFile(FILE_NETWORK_LOG);
             
             // Log received data
             version.ifPresent(s -> logger.info("Crash report version: " + s));
             errorDescription.ifPresent(s -> logger.info("Error description received (" + s.length() + " characters)"));
             
             // Save dump file if present
-            Path savedDumpFile = null;
+            Path savedFile = null;
             if (dumpFile.isPresent()) {
                 MultipartParser.FileData fileData = dumpFile.get();
                 logger.info("Saving dump file: " + fileData.getFileName() + " (" + fileData.getSize() + " bytes)");
-                savedDumpFile = fileService.saveFile(fileData.getData(), fileData.getFileName());
-                logger.info("Dump file saved to: " + savedDumpFile);
+                savedFile = fileService.saveFile(fileData.getData(), fileData.getFileName());
+                logger.info("Dump file saved to: " + savedFile);
             }
+
+            if (savedFile == null) {
+                return HttpResponse.badRequest("No crash data received");
+            }
+
+            String baseFileName = savedFile.getFileName().toString();
             
             // Save error description as text file if present and dump file was saved
-            if (errorDescription.isPresent() && savedDumpFile != null) {
-                String baseFileName = savedDumpFile.getFileName().toString();
+            if (errorDescription.isPresent()) {
                 Path descriptionFile = fileService.saveDescription(errorDescription.get(), baseFileName);
                 logger.info("Description saved to: " + descriptionFile);
             }
-            
-            if (savedDumpFile == null && !errorDescription.isPresent()) {
-                return HttpResponse.badRequest("No crash data received");
+
+            if (gameLogFile.isPresent()) {
+                MultipartParser.FileData fileData = gameLogFile.get();
+                logger.info("Saving dump file: " + fileData.getFileName() + " (" + fileData.getSize() + " bytes)");
+                savedFile = fileService.saveFileWithPostfix(fileData.getData(), baseFileName, "_game.log");
+                logger.info("Game log file saved to: " + savedFile);
+            }
+
+            if (memoryLogFile.isPresent()) {
+                MultipartParser.FileData fileData = memoryLogFile.get();
+                logger.info("Saving dump file: " + fileData.getFileName() + " (" + fileData.getSize() + " bytes)");
+                savedFile = fileService.saveFileWithPostfix(fileData.getData(), baseFileName, "_mem.log");
+                logger.info("Memory log file saved to: " + savedFile);
+            }
+
+            if (networkLogFile.isPresent()) {
+                MultipartParser.FileData fileData = networkLogFile.get();
+                logger.info("Saving dump file: " + fileData.getFileName() + " (" + fileData.getSize() + " bytes)");
+                savedFile = fileService.saveFileWithPostfix(fileData.getData(), baseFileName, "_net.log");
+                logger.info("Network log file saved to: " + savedFile);
             }
             
             return HttpResponse.ok("Crash report received successfully");

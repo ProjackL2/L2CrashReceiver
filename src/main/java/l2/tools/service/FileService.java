@@ -108,6 +108,14 @@ public final class FileService {
         Files.write(finalPath, data, StandardOpenOption.CREATE_NEW);
         return finalPath;
     }
+
+    /**
+     * Saves a file with a new filename ending.
+     */
+    public Path saveFileWithPostfix(byte[] data, String baseFileName, String postfix) throws IOException {
+        String textFileName = replaceExtension(baseFileName, postfix);
+        return saveFile(data, textFileName);
+    }
     
     /**
      * Saves description/error text as a text file.
