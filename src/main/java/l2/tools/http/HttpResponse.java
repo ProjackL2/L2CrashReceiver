@@ -39,6 +39,10 @@ public final class HttpResponse {
         return new HttpResponse(413, "Payload Too Large", getDefaultHeaders(), message);
     }
     
+    public static HttpResponse requestTimeout(String message) {
+        return new HttpResponse(408, "Request Timeout", getDefaultHeaders(), message);
+    }
+    
     public static HttpResponse internalServerError(String message) {
         return new HttpResponse(500, "Internal Server Error", getDefaultHeaders(), message);
     }

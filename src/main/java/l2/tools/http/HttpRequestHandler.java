@@ -1,5 +1,6 @@
 package l2.tools.http;
 
+import l2.tools.config.ServerConfiguration;
 import l2.tools.service.FileService;
 
 import java.io.BufferedReader;
@@ -7,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -34,16 +36,25 @@ public final class HttpRequestHandler implements Runnable {
     
     private final Socket clientSocket;
     private final FileService fileService;
+    private final ServerConfiguration configuration;
     
-    public HttpRequestHandler(Socket clientSocket, FileService fileService) {
+    public HttpRequestHandler(Socket clientSocket, FileService fileService, ServerConfiguration configuration) {
         this.clientSocket = clientSocket;
         this.fileService = fileService;
+        this.configuration = configuration;
     }
     
     @Override
     public void run() {
         String clientAddress = clientSocket.getInetAddress().getHostAddress();
         logger.info("Processing request from: " + clientAddress);
+        
+        try {
+            // Set socket timeout for request processing
+            clientSocket.setSoTimeout(configuration.getRequestTimeout());
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "Failed to set socket timeout for " + clientAddress, e);
+        }
         
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.ISO_8859_1));
@@ -56,6 +67,13 @@ public final class HttpRequestHandler implements Runnable {
             
             logger.info("Request from " + clientAddress + " completed with status: " + response.getStatusCode());
             
+        } catch (SocketTimeoutException e) {
+            logger.log(Level.WARNING, "Request timeout from " + clientAddress, e);
+            try (OutputStream outputStream = clientSocket.getOutputStream()) {
+                HttpResponse.requestTimeout("Request timeout").writeTo(outputStream);
+            } catch (IOException ioException) {
+                logger.log(Level.SEVERE, "Failed to send timeout response", ioException);
+            }
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error processing request from " + clientAddress, e);
             try (OutputStream outputStream = clientSocket.getOutputStream()) {

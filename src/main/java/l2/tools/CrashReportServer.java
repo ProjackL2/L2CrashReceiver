@@ -67,7 +67,7 @@ public final class CrashReportServer {
                 try {
                     Socket clientSocket = serverSocket.accept();
                     if (running) {
-                        HttpRequestHandler handler = new HttpRequestHandler(clientSocket, fileService);
+                        HttpRequestHandler handler = new HttpRequestHandler(clientSocket, fileService, configuration);
                         executorService.submit(handler);
                     } else {
                         clientSocket.close();
