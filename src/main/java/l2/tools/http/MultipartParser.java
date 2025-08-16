@@ -211,14 +211,6 @@ public final class MultipartParser {
         public Optional<FileData> getFile(String fieldName) {
             return Optional.ofNullable(files.get(fieldName));
         }
-        
-        public Map<String, String> getAllFields() {
-            return new HashMap<>(fields);
-        }
-        
-        public Map<String, FileData> getAllFiles() {
-            return new HashMap<>(files);
-        }
     }
     
     /**
