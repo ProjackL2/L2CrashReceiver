@@ -60,6 +60,8 @@ The server accepts POST requests to any path with the following requirements:
   - `CRVersion` (optional): Version information
   - `error` (optional): Error description text
   - `dumpfile` (optional): Binary dump file
+  - `gamelog` (optional): Game log file(l2.log)
+  - `networklog` (optional): Network log file(Network.log)
 
 ### Response Codes
 - **200 OK**: Crash report processed successfully

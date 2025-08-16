@@ -34,7 +34,6 @@ public final class HttpRequestHandler implements Runnable {
     private static final String ERROR_FIELD = "error";
     private static final String FILE_FIELD = "dumpfile";
     private static final String FILE_GAME_LOG = "gamelog";
-    private static final String FILE_MEMORY_LOG = "memorylog";
     private static final String FILE_NETWORK_LOG = "networklog";
     
     private final Socket clientSocket;
@@ -311,7 +310,6 @@ public final class HttpRequestHandler implements Runnable {
             Optional<String> errorDescription = multipartData.getField(ERROR_FIELD);
             Optional<MultipartParser.FileData> dumpFile = multipartData.getFile(FILE_FIELD);
             Optional<MultipartParser.FileData> gameLogFile = multipartData.getFile(FILE_GAME_LOG);
-            Optional<MultipartParser.FileData> memoryLogFile = multipartData.getFile(FILE_MEMORY_LOG);
             Optional<MultipartParser.FileData> networkLogFile = multipartData.getFile(FILE_NETWORK_LOG);
             
             // Log received data
@@ -344,13 +342,6 @@ public final class HttpRequestHandler implements Runnable {
                 logger.info("Saving dump file: " + fileData.getFileName() + " (" + fileData.getSize() + " bytes)");
                 savedFile = fileService.saveFileWithPostfix(fileData.getData(), baseFileName, "_game.log");
                 logger.info("Game log file saved to: " + savedFile);
-            }
-
-            if (memoryLogFile.isPresent()) {
-                MultipartParser.FileData fileData = memoryLogFile.get();
-                logger.info("Saving dump file: " + fileData.getFileName() + " (" + fileData.getSize() + " bytes)");
-                savedFile = fileService.saveFileWithPostfix(fileData.getData(), baseFileName, "_mem.log");
-                logger.info("Memory log file saved to: " + savedFile);
             }
 
             if (networkLogFile.isPresent()) {
