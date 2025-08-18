@@ -172,11 +172,6 @@ public final class FileValidator {
     private static void validateTextFile(byte[] data, String fileName) throws SecurityException {
         String content = new String(data, StandardCharsets.UTF_8);
 
-        // Check for null bytes (indication of binary content)
-        if (content.contains("\0")) {
-            throw new SecurityException("Text file contains null bytes - possible binary content");
-        }
-
         // Check for suspicious script content
         String lowerContent = content.toLowerCase();
         for (String pattern : FileConstants.SUSPICIOUS_SCRIPT_PATTERNS) {
